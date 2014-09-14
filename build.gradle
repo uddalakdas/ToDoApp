@@ -4,6 +4,36 @@ import com.manning.gia.ProjectVersion
 import com.manning.gia.ReleaseVersionTask
 import com.manning.gia.ReleaseVersionListener
 ext.versionFile = file('version.properties')
+ext.cargoGroup = 'org.codehaus.cargo'
+ext.cargoVersion = '1.3.1'
+configurations { 
+	cargo {
+		description = 'Classpath for cargo ANT tasks'
+		visible = false
+	}
+}
+task deployToLocalTomcat << {
+	FileTree cargoDeps = configurations.cargo.asFileTree
+	ant.taskdef(resource: 'cargo.tasks', classpath: cargoDeps.asPath)
+	ant.cargo(containerID: 'tomcat7x', action: 'run', output: "$buildDir/output.log"){
+		configuration {
+			deployable(type: 'war', file: 'ToDoApp.war')
+		}
+		zipUrlInstaller(installUrl : 'http://archive.apache.org/dist/tomcat/tomcat-7/v7.0.32/bin/apache-tomcat-7.0.32.zip')
+	}
+}
+task copyDependenciesToLocalDir(type: Copy) {
+	from configurations.cargo.asFileTree
+	into "${System.properties['user.home']}/libs/cargo"
+}
+repositories {
+	mavenCentral()
+}
+	
+dependencies {
+	cargo group: cargoGroup, name: 'cargo-core-uberjar',version: cargoVersion
+	cargo "$cargoGroup:cargo-ant:$cargoVersion"
+}
 
 task loadVersion {
 	project.version=readVersion()
