@@ -1,2 +1,50 @@
 apply plugin : 'eclipse'
 apply plugin : 'java'
+
+ext.versionFile = file('version.properties')
+class ProjectVersion{
+	Integer major
+	Integer minor
+	Boolean release
+	
+	ProjectVersion(Integer major, Integer minor){
+		this.major = major
+		this.minor = minor
+		this.release = false
+	}
+	ProjectVersion(Integer major, Integer minor, Boolean release){
+		this(major,minor)
+		this.release = release
+	}
+	@Override
+	String toString(){
+		"$major.$minor${release?'':'-SNAPSHOT'}"
+	}
+}
+task loadVersion {
+	project.version=readVersion()
+}
+ProjectVersion readVersion() {
+	logger.quiet('Reading version file')
+	
+	if(!versionFile.exists())
+		throw new GradleException("Required version file does not exists : $versionFile.canonicalPath")
+	
+	Properties versionProps = new Properties();
+	
+	versionFile.withInputStream { stream ->
+		versionProps.load(stream)
+	}
+	new ProjectVersion(versionProps.major.toInteger(),versionProps.minor.toInteger(),versionProps.release.toBoolean())
+}
+task makeReleaseVersion(group : 'Versioning',description : 'Makes project a release version') {
+	inputs.property('release', version.release)
+	outputs.file versionFile
+	
+	doLast(){
+		version.release = true
+		ant.propertyfile(file: versionFile){
+			entry(key: 'release', type: 'string', operation: '=', value: 'true')
+		}
+	}
+}
