@@ -1,26 +1,10 @@
 apply plugin : 'eclipse'
 apply plugin : 'java'
-
+import com.manning.gia.ProjectVersion
+import com.manning.gia.ReleaseVersionTask
+import com.manning.gia.ReleaseVersionListener
 ext.versionFile = file('version.properties')
-class ProjectVersion{
-	Integer major
-	Integer minor
-	Boolean release
-	
-	ProjectVersion(Integer major, Integer minor){
-		this.major = major
-		this.minor = minor
-		this.release = false
-	}
-	ProjectVersion(Integer major, Integer minor, Boolean release){
-		this(major,minor)
-		this.release = release
-	}
-	@Override
-	String toString(){
-		"$major.$minor${release?'':'-SNAPSHOT'}"
-	}
-}
+
 task loadVersion {
 	project.version=readVersion()
 }
@@ -37,14 +21,70 @@ ProjectVersion readVersion() {
 	}
 	new ProjectVersion(versionProps.major.toInteger(),versionProps.minor.toInteger(),versionProps.release.toBoolean())
 }
-task makeReleaseVersion(group : 'Versioning',description : 'Makes project a release version') {
-	inputs.property('release', version.release)
-	outputs.file versionFile
+
+
+/*task makeReleaseVersion(type: ReleaseVersionTask) {
+	release=version.release
+	destFile= versionFile
+}
+*/
+
+
+task createDistribution(type: Zip){
+	from jar.outputs.files
 	
-	doLast(){
-		version.release = true
-		ant.propertyfile(file: versionFile){
-			entry(key: 'release', type: 'string', operation: '=', value: 'true')
+	from(sourceSets*.allSource){
+		into 'src'
+	}
+	
+	from(rootDir){
+		include versionFile.name
+	}
+}
+task backupReleaseDistribution(type: Copy){
+	from createDistribution.outputs.files
+	into "$buildDir/backup"
+}
+
+task release(dependsOn : backupReleaseDistribution){
+	logger.quiet "Releasing Distribuion with version = $project.version"
+}	
+
+tasks.addRule("Pattern : increment<classifier>Version - increments the project version classifier") { String taskName ->
+	if(taskName.startsWith('increment') && taskName.endsWith('Version')){
+		task (taskName) << {
+			String classifier = (taskName - 'increment' - 'Version').toLowerCase()
+			String currentVersion = project.version.toString();
+			String newVersion
+			switch(classifier){
+				case 'major' :
+					++version.major
+					break
+				case 'minor' :
+					++version.minor
+					break
+				default :
+					throw new GradleException("Invalid version classifier : $classifier. Allowed types : ['Major' ,'Minor']")
+			}
+			newVersion=version.toString();
+			ant.propertyfile(file: versionFile){
+				entry(key : classifier, type : 'int', operation: '+', value: 1)
+			}
 		}
 	}
 }
+
+/*
+gradle.taskGraph.whenReady{ TaskExecutionGraph taskGraph ->
+	if(taskGraph.hasTask(release)){
+		if(!version.release){
+			version.release=true
+			ant.propertyfile(file: versionFile){
+				entry(key: 'release', type: 'string', operation: '=', value: 'true')
+			}
+		}
+	}
+}
+*/
+def releaseVersionListener = new ReleaseVersionListener();
+gradle.taskGraph.addTaskExecutionGraphListener(releaseVersionListener);
