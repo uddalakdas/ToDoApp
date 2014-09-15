@@ -1,1 +1,3 @@
 rootProject.name = 'ToDoApp'
+include 'model'
+include 'repository', 'input'
